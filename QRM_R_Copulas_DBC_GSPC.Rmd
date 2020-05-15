@@ -1,44 +1,44 @@
 ---
-title: "R Copulas - Adidas/Heineken"
+title: "R Notebook"
 output: html_notebook
 ---
+
+install.packages("CDVine")
+
 ```{r}
-#lLoad libraries
+#Load libraries
+
 library(magrittr) 
 library(dplyr)
 library(copula)
 library(VineCopula)
+library(broom)
 
-#import data
-ads_heia <- read.csv("C:/Users/Asus/Desktop/QRM/First Assignment/QRM2020/01_Data/ads_heia.csv", header=T)
-ads <- ads_heia %>% select(2)
-heia <-ads_heia %>% select(3)
+dbc_gspc <- read.csv("C:/Users/Asus/Desktop/QRM/First Assignment/QRM2020/01_Data/dbc_gspc.csv", header=T)
+dbc <- dbc_gspc %>% select(2)
+gspc <-dbc_gspc %>% select(3)
 ```
 
 ```{r}
 #Check correlation to confirm we get same results as Python and import went correctly
-cor(ads,heia,method='spearman')
-```
+cor(dbc,gspc,method='spearman')
 
-```{r}
-u <- pobs(as.matrix(cbind(ads,heia)))[,1]
-v <- pobs(as.matrix(cbind(ads,heia)))[,2]
+u <- pobs(as.matrix(cbind(dbc,gspc)))[,1]
+v <- pobs(as.matrix(cbind(dbc,gspc)))[,2]
 selectedCopula <- BiCopSelect(u,v,familyset=NA)
 selectedCopula
 ?BiCopSelect() 
 ```
 
 ```{r}
-#The fitting algorithm selected BB1 copula and estimated the parameters for us
-#Bivariate copula: Survival BB1 (par = 0.13, par2 = 1.31, tau = 0.28) 
-
+#The fitting algorithm selected BB7 (Clayton-Joe) copula and estimated the parameters for us
+#Bivariate copula: Survival BB7 (par = 1.41, par2 = 0.27, tau = 0.27) 
 #Let's try to fit the suggested model using the copula package and double check the parameters fitting.
 
 #Fit t-copula to test
-
 t.cop <- tCopula(dim=2)
 set.seed(500)
-m     <- pobs(as.matrix(cbind(ads,heia)))
+m     <- pobs(as.matrix(cbind(dbc,gspc)))
 fit   <- fitCopula(t.cop,m,method='ml')
 coef(fit)
 ```
@@ -54,9 +54,10 @@ persp(tCopula(dim=2,rho,df=df),dCopula)
 ```
 
 ```{r}
+
 #Now we only need to build the copula and sample from the random samples.
 
-u <- rCopula(20000,tCopula(dim=2,rho,df=df))
+u <- rCopula(10000,tCopula(dim=2,rho,df=df))
 plot(u[,1],u[,2],pch='.',col='blue')
 cor(u,method='spearman')
 ```
@@ -71,21 +72,24 @@ cor(u,method='spearman')
 
 #Now we will model the marginals bt assuming normally distributed returns for simplicity.
 
-
-ads_mu  <- mean(ads$ADS_return, na.rm = TRUE)
-ads_sd  <- sd(ads$ADS_return, na.rm = TRUE)
-heia_mu  <- mean(heia$HEIA_return, na.rm = TRUE)
-heia_sd  <- sd(heia$HEIA_return, na.rm = TRUE)
+dbc_mu  <- mean(dbc$DBC_return, na.rm = TRUE)
+dbc_sd  <- sd(dbc$DBC_return, na.rm = TRUE)
+gspc_mu  <- mean(gspc$GSPC_return, na.rm = TRUE)
+gspc_sd  <- sd(gspc$GSPC_return, na.rm = TRUE)
 
 copula_dist <- mvdc(copula=tCopula(rho,dim=2,df=df), margins=c("norm","norm"),
-                    paramMargins=list(list(mean=ads_mu, sd=ads_sd),
-                                      list(mean=heia_mu, sd=heia_sd)))
+                    paramMargins=list(list(mean=dbc_mu, sd=dbc_sd),
+                                      list(mean=gspc_mu, sd=gspc_sd)))
+
+#copula_dist <- mvdc(copula=tCopula(rho,dim=2,df=df), margins=c("t","t"),
+        #            paramMargins=list(t=7,t=7))
 sim <- rMvdc(5000,copula_dist)
 
 options(repr.plot.width=5, repr.plot.height=5)
 par(mfrow=c(1, 1))
 
-plot(ads$ADS_return,heia$HEIA_return,main='Returns')
+plot(dbc$DBC_return,gspc$GSPC_return,main='Returns')
 points(sim[,1],sim[,2],col='red')
 legend('bottomright',c('Observed','Simulated'),col=c('black','red'),pch=21)
 ```
+
