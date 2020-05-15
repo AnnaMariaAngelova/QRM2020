@@ -1,0 +1,91 @@
+---
+title: "R Copulas - Adidas/Heineken"
+output: html_notebook
+---
+```{r}
+#lLoad libraries
+library(magrittr) 
+library(dplyr)
+library(copula)
+library(VineCopula)
+
+#import data
+ads_heia <- read.csv("C:/Users/Asus/Desktop/QRM/First Assignment/QRM2020/01_Data/ads_heia.csv", header=T)
+ads <- ads_heia %>% select(2)
+heia <-ads_heia %>% select(3)
+```
+
+```{r}
+#Check correlation to confirm we get same results as Python and import went correctly
+cor(ads,heia,method='spearman')
+```
+
+```{r}
+u <- pobs(as.matrix(cbind(ads,heia)))[,1]
+v <- pobs(as.matrix(cbind(ads,heia)))[,2]
+selectedCopula <- BiCopSelect(u,v,familyset=NA)
+selectedCopula
+?BiCopSelect() 
+```
+
+```{r}
+#The fitting algorithm selected BB1 copula and estimated the parameters for us
+#Bivariate copula: Survival BB1 (par = 0.13, par2 = 1.31, tau = 0.28) 
+
+#Let's try to fit the suggested model using the copula package and double check the parameters fitting.
+
+#Fit t-copula to test
+
+t.cop <- tCopula(dim=2)
+set.seed(500)
+m     <- pobs(as.matrix(cbind(ads,heia)))
+fit   <- fitCopula(t.cop,m,method='ml')
+coef(fit)
+```
+
+```{r}
+#The algorithm estimated the following parameters for t copula: rho.1=0.430653     df = 6.394845
+
+#Let's take a look at the density of the copula we have just estimated
+
+rho <- coef(fit)[1]
+df  <- coef(fit)[2]
+persp(tCopula(dim=2,rho,df=df),dCopula)
+```
+
+```{r}
+#Now we only need to build the copula and sample from the random samples.
+
+u <- rCopula(20000,tCopula(dim=2,rho,df=df))
+plot(u[,1],u[,2],pch='.',col='blue')
+cor(u,method='spearman')
+```
+
+```{r}
+#This is the plot of the samples contained in the vector u. The random samples from the copula look
+#a little bit close to the independence case, but that is fine since the correlation between the returns is low
+#Note that the generated samples have the same correlation as the data. The t-copula emphasizes extreme results: 
+#it is usually good for modelling phenomena where there is high correlation in the extreme values (the tails of 
+#the distribution). Note also that it is symmetrical, this might be an issue for our application, however we are 
+#going to neglect this.
+
+#Now we will model the marginals bt assuming normally distributed returns for simplicity.
+
+
+ads_mu  <- mean(ads$ADS_return, na.rm = TRUE)
+ads_sd  <- sd(ads$ADS_return, na.rm = TRUE)
+heia_mu  <- mean(heia$HEIA_return, na.rm = TRUE)
+heia_sd  <- sd(heia$HEIA_return, na.rm = TRUE)
+
+copula_dist <- mvdc(copula=tCopula(rho,dim=2,df=df), margins=c("norm","norm"),
+                    paramMargins=list(list(mean=ads_mu, sd=ads_sd),
+                                      list(mean=heia_mu, sd=heia_sd)))
+sim <- rMvdc(5000,copula_dist)
+
+options(repr.plot.width=5, repr.plot.height=5)
+par(mfrow=c(1, 1))
+
+plot(ads$ADS_return,heia$HEIA_return,main='Returns')
+points(sim[,1],sim[,2],col='red')
+legend('bottomright',c('Observed','Simulated'),col=c('black','red'),pch=21)
+```
